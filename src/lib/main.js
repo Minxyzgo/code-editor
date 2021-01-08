@@ -130,7 +130,7 @@ function Main() {
         document.body.setAttribute('data-small-msg', "This is taking unexpectedly long time!");
     }, 1000 * 10);
 
-    window.IS_FREE_VERSION = /(free)$/.test(BuildInfo.packageName);
+    window.IS_FREE_VERSION = false;
     window.DATA_STORAGE = cordova.file.externalDataDirectory || cordova.file.dataDirectory;
     window.TEMP_STORAGE = DATA_STORAGE + "tmp/";
     window.CACHE_STORAGE = cordova.file.externalCacheDirectory || cordova.file.cacheDirectory;
