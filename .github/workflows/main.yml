@@ -47,7 +47,7 @@ jobs:
     - name: Setup build type
       run: echo "::set-env name=BUILD_TYPE::$BUILD_TYPE"
       env:
-        BUILD_TYPE: release
+        BUILD_TYPE: debug
         ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
     
     - name: Add platform android
@@ -80,8 +80,8 @@ jobs:
       run: echo "::set-env name=APP_NAME::acode-${BUILD_TYPE}-${SHORT_REV}.apk"
       
     
-    #- name: Rename apk to APP_NAME
-     # run: mv platforms/android/app/build/outputs/apk/${BUILD_TYPE}/app-${BUILD_TYPE}.apk ${APP_NAME}
+    - name: Rename apk to APP_NAME
+      run: mv platforms/android/app/build/outputs/apk/${BUILD_TYPE}/app-${BUILD_TYPE}.apk ${APP_NAME}
         
     - name: Upload apk
       uses: actions/upload-artifact@v1
