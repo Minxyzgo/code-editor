@@ -1,6 +1,5 @@
 import ajax from '../utils/ajax';
 import Url from '../utils/Url';
-import mimeType from 'mime-types';
 export default {
 
     /**
@@ -33,9 +32,12 @@ export default {
      * @returns {Promise} 
      */
     writeFile(filename, data, create = false, exclusive = true) {
-        // filename = decodeURL(filename);
         const name = filename.split('/').pop();
         const _path = Url.dirname(filename);
+
+        if (data instanceof ArrayBuffer)
+            data = new Blob([data]);
+
         return new Promise((resolve, reject) => {
             if (!create) {
                 window.resolveLocalFileSystemURL(filename, fileEntry => {

@@ -21,19 +21,29 @@ import Url from '../../lib/utils/Url';
 import util from './util';
 import openFolder from '../../lib/openFolder';
 //#endregion
+
 /**
  * 
- * @param {"file"|"dir"} [type='file']
- * @param {string|function(string):boolean} option button text or function to check extension
+ * @param {"file"|"folder"} [type='file']
+ * @param {string|function(string):boolean} [option] button text or function to check extension
+ * @param {string} [info]
  */
-function FileBrowserInclude(type, option) {
+function FileBrowserInclude(type, option, info) {
   if (!type) type = 'file';
-  const actionStack = window.actionStack;
+  let fileBrowserState = [];
+  let fileBrowserOldState = JSON.parse(localStorage.fileBrowserState || "[]");
   const prompt = dialogs.prompt;
   /**@type {Array<{name: string, uuid: string, uri: string}>} */
-  let customUuid = JSON.parse(localStorage.customUuid || '[]');
+  let allStorages = JSON.parse(localStorage.customUuid || '[]');
   /**@type {Array<FTPAccount>} */
   let ftpaccounts = JSON.parse(localStorage.ftpaccounts || '[]');
+  let mapFunction = typeof option === "function" ? option : () => true;
+  const saveStoragList = ()=>{localStorage.customUuid = JSON.stringify(allStorages)};
+
+  info = info || (type === "folder" ? strings["open folder"] : strings["open file"]);
+
+  if (type === "folder")
+    mapFunction = () => false;
 
   return new Promise((_resolve, reject) => {
     //#region Declaration
@@ -57,7 +67,8 @@ function FileBrowserInclude(type, option) {
     });
     const $page = Page('File Browser');
     const $content = tag.parse(mustache.render(_template, {
-      type
+      type,
+      info
     }));
     const $navigation = $content.querySelector('.navigation');
     const actionsToDispose = [];
@@ -134,8 +145,8 @@ function FileBrowserInclude(type, option) {
       } else if (action === "add-path") {
         util.addPath()
           .then(res => {
-            customUuid.push(res);
-            localStorage.customUuid = JSON.stringify(customUuid);
+            allStorages.push(res);
+            localStorage.customUuid = JSON.stringify(allStorages);
             navigate.pop();
             renderStorages();
           })
@@ -182,16 +193,22 @@ function FileBrowserInclude(type, option) {
     renderStorages();
 
     function renderStorages() {
-      renderList(getStorageList());
+      const storageList = [];
 
       if (!localStorage.fileBrowserInit) {
         dialogs.loader.destroy();
+
+        allStorages.push({
+          name: 'Internal storage',
+          uuid: helpers.uuid()
+        });
 
         new Promise((resolve, reject) => {
 
             if (IS_ANDROID_VERSION_5)
               resolve([{
-                name: "External storage"
+                name: "External storage",
+                uuid: helpers.uuid()
               }]);
             else
               externalFs.listStorages()
@@ -201,30 +218,63 @@ function FileBrowserInclude(type, option) {
           })
           .then(res => {
 
-            dialogs.confirm(strings.info.toUpperCase(), strings[IS_ANDROID_VERSION_5 ? "add external storage?" : "sdcard found"])
-              .then(() => {
-                if (Array.isArray(res) && res.length > 0)
-                  util.addPath(res[0].name)
-                  .then(res => {
-                    customUuid.push(res);
-                    localStorage.customUuid = JSON.stringify(customUuid);
-                    navigate.pop();
-                    renderStorages();
-                  })
-                  .catch(err => {
-                    helpers.error(err);
-                    console.error(err);
-                  });
+            res.forEach(storage=>{
+              if(allStorages.find(s=>s.uuid === storage.uuid)) return;
+              allStorages.push({
+                ...storage,
+                storageType: "SD"
               });
+            });
+            saveStoragList();
+            storageList.push(...getStorageList());
+            renderStorages();
 
           });
 
         localStorage.fileBrowserInit = true;
+
+        return;
+      }
+
+      if (fileBrowserOldState.length > 1) {
+        loadUrl();
+        return;
+      }
+
+      storageList.push(...getStorageList());
+      renderList(storageList);
+    }
+
+    function loadUrl() {
+      let state = fileBrowserOldState,
+        currUrl;
+      fileBrowserOldState = [];
+
+      for (let i = 0; i < state.length; ++i) {
+        const {
+          url,
+          name
+        } = state[i];
+
+        if (i) actionStack.push({
+          id: currUrl,
+          action
+        });
+
+        if (i === state.length - 1)
+          loadDir(url, name);
+        else
+          navigate(name, url);
+
+        currUrl = url;
+      }
+
+      function action() {
+        navigate.pop();
       }
     }
 
     function renderList(list) {
-      delete localStorage.lastDir;
       if (type === 'folder')
         folderOption.classList.add('disabled');
 
@@ -238,7 +288,6 @@ function FileBrowserInclude(type, option) {
     }
 
     function resolve(data) {
-      localStorage.setItem("lastDir", currentDir.url);
       _resolve(data);
     }
 
@@ -247,13 +296,11 @@ function FileBrowserInclude(type, option) {
      */
     function getStorageList() {
       const list = [];
-
-      const path = cordova.file.externalRootDirectory;
-      util.pushFolder(list, 'Internal storage', path);
-      customUuid.map(storage => {
+      
+      allStorages.map(storage => {
         util.pushFolder(list, storage.name, storage.uri, {
-          uuid: storage.uuid,
-          storageType: "SD"
+          storageType: storage.storageType,
+          uuid: storage.uuid
         });
       });
 
@@ -289,7 +336,7 @@ function FileBrowserInclude(type, option) {
       }
 
       cachedDir["/"] = {
-        name,
+        name: "/",
         list
       };
 
@@ -324,8 +371,10 @@ function FileBrowserInclude(type, option) {
           })
           .then(list => {
             update();
-            list = helpers.sortDir(list,
-              appSettings.value.fileBrowser
+            list = helpers.sortDir(
+              list,
+              appSettings.value.fileBrowser,
+              mapFunction
             );
             cachedDir[url] = {
               name,
@@ -353,7 +402,6 @@ function FileBrowserInclude(type, option) {
           if (type === 'folder') folderOption.classList.remove('disabled');
         }
 
-        localStorage.lastDir = url;
         currentDir.url = url;
         currentDir.name = name;
         const $list = tag.get('#list');
@@ -376,21 +424,39 @@ function FileBrowserInclude(type, option) {
       let action = $el.getAttribute('action');
       if (!action) return;
 
-      const url = $el.getAttribute('url');
+      let url = $el.getAttribute('url');
       const name = $el.getAttribute('name');
-      const opendoc = $el.getAttribute('open-doc');
+      const opendoc = $el.hasAttribute('open-doc');
       const uuid = $el.getAttribute('uuid');
       const isFTP = $el.hasAttribute('ftp-account');
+      const type = $el.getAttribute('type');
+
+      if(!url && action === 'open' && type === 'dir'){
+        dialogs.loader.hide();
+        util.addPath(name)
+        .then(res=>{
+          const storage = allStorages.find(storage=>storage.uuid === uuid);
+          storage.uri = res.uri;
+          saveStoragList();
+          url = res.uri;
+          folder();
+        });
+        return;
+      }
 
       if (opendoc) action = "open-doc";
+      if (contextMenu) action = "contextmenu";
 
       switch (action) {
         case 'navigation':
-        case 'folder':
           folder();
           break;
-        case 'file':
-          file();
+        case 'contextmenu':
+          cmhandle();
+          break;
+        case 'open':
+          if (type === "dir") folder();
+          else if (!$el.hasAttribute("disabled")) file();
           break;
         case "open-doc":
           openDoc();
@@ -398,33 +464,24 @@ function FileBrowserInclude(type, option) {
       }
 
       function folder() {
-        if (contextMenu !== 'contextmenu') {
-          const currentUrl = currentDir.url;
-          cachedDir[currentUrl].scroll = tag.get('#list').scrollTop;
-          actionsToDispose.push(currentUrl);
-          actionStack.push({
-            id: currentUrl,
-            action: function () {
-              navigate.pop();
-            }
-          });
-          loadDir(url, name);
-        } else {
-          cmhandle();
-        }
+        const $list = tag.get('#list');
+        const currentUrl = currentDir.url;
+        cachedDir[currentUrl].scroll = $list ? $list.scrollTop : 0;
+        actionsToDispose.push(currentUrl);
+        actionStack.push({
+          id: currentUrl,
+          action: function () {
+            navigate.pop();
+          }
+        });
+        loadDir(url, name);
       }
 
       function file() {
-        if (contextMenu !== "contextmenu") {
-          if (typeof option === 'function' && option(name)) {
-            $page.hide();
-            resolve({
-              url
-            });
-          }
-        } else {
-          cmhandle();
-        }
+        $page.hide();
+        resolve({
+          url
+        });
       }
 
       function cmhandle() {
@@ -489,8 +546,8 @@ function FileBrowserInclude(type, option) {
       function removeFile() {
         fsOperation(url)
           .then(fs => {
-            if (action === "file") return fs.deleteFile();
-            if (action === "folder") return fs.deleteDir();
+            if (type === "file") return fs.deleteFile();
+            if (type === "dir") return fs.deleteDir();
           })
           .then(() => {
             openFolder.removeItem(url);
@@ -509,8 +566,8 @@ function FileBrowserInclude(type, option) {
           ftpaccounts = ftpaccounts.filter(account => account.id !== uuid);
           localStorage.ftpaccounts = JSON.stringify(ftpaccounts);
         } else {
-          customUuid = customUuid.filter(storage => storage.uuid !== uuid);
-          localStorage.customUuid = JSON.stringify(customUuid);
+          allStorages = allStorages.filter(storage => storage.uuid !== uuid);
+          localStorage.customUuid = JSON.stringify(allStorages);
         }
 
         navigate.pop();
@@ -525,11 +582,11 @@ function FileBrowserInclude(type, option) {
           });
           localStorage.ftpaccounts = JSON.stringify(ftpaccounts);
         } else {
-          customUuid = customUuid.map(storage => {
+          allStorages = allStorages.map(storage => {
             if (storage.uuid === uuid) storage.name = newname;
             return storage;
           });
-          localStorage.customUuid = JSON.stringify(customUuid);
+          localStorage.customUuid = JSON.stringify(allStorages);
         }
 
         navigate.pop();
@@ -550,7 +607,7 @@ function FileBrowserInclude(type, option) {
     }
 
     function handleContextMenu(e) {
-      handleClick(e, 'contextmenu');
+      handleClick(e, true);
     }
 
     function refresh() {
@@ -571,6 +628,15 @@ function FileBrowserInclude(type, option) {
     }
 
     function navigate(name, url) {
+
+      if (name) {
+        fileBrowserState.push({
+          name,
+          url
+        });
+        localStorage.fileBrowserState = JSON.stringify(fileBrowserState);
+      }
+
       let $nav = $navigation.querySelector(`[url="${url}"]`);
       const $old = $navigation.querySelector('.active');
       if ($old) $old.classList.remove('active');
@@ -607,6 +673,7 @@ function FileBrowserInclude(type, option) {
     }
 
     navigate.pop = function () {
+      localStorage.fileBrowserState = JSON.stringify(fileBrowserState.slice(0, -1));
       const $nav = $navigation.lastChild.previousElementSibling;
       if ($nav) {
         const url = $nav.getAttribute('url');
@@ -666,7 +733,11 @@ function FileBrowserInclude(type, option) {
               console.error(e);
             });
         });
-      } else if (arg === "project") {
+
+        return;
+      } 
+      
+      if (arg === "project") {
 
         const options = [];
         const alreadyCreated = [];

@@ -2,8 +2,8 @@ const path = require("path");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 // const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
 
-module.exports = {
-  mode: 'production',
+const noModule = {
+  mode: 'development',
   entry: {
     main: "./src/lib/main.js",
     console: "./src/lib/console.js",
@@ -34,7 +34,6 @@ module.exports = {
             loader: MiniCssExtractPlugin.loader,
             options: {
               publicPath: "../../",
-              hmr: process.env.NODE_ENV === "development"
             }
           },
           "css-loader?url=false",
@@ -44,6 +43,12 @@ module.exports = {
       }
     ]
   },
+  resolve: {
+    fallback: {
+      path: require.resolve('path-browserify'),
+      crypto: false
+    }
+  },
   plugins: [
     new MiniCssExtractPlugin({
       filename: "../../css/build/[name].css",
@@ -52,3 +57,5 @@ module.exports = {
     // new BundleAnalyzerPlugin()
   ]
 };
+
+module.exports = [noModule];

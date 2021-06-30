@@ -1,15 +1,15 @@
-window.system = {
+module.exports = {
   getWebviewInfo: function (onSuccess, onFail) {
     cordova.exec(onSuccess, onFail, "System", "get-webkit-info", []);
   },
   clearCache: function (onSuccess, onFail) {
     cordova.exec(onSuccess, onFail, "System", "clear-cache", []);
   },
-  enableFullScreen: function (onSuccess, onFail) {
-    cordova.exec(onSuccess, onFail, "System", "enable-fullscreen", []);
+  hideNavigation: function (onSuccess, onFail) {
+    cordova.exec(onSuccess, onFail, "System", "hide-navigation", []);
   },
-  disableFullScreen: function (onSuccess, onFail) {
-    cordova.exec(onSuccess, onFail, "System", "disable-fullscreen", []);
+  isPowerSaveMode: function (onSuccess, onFail) {
+    cordova.exec(onSuccess, onFail, "System", "is-powersave-mode", []);
   },
   shareFile: function (fileUri, filename, onSuccess, onFail) {
     if (typeof filename === "function") {
@@ -22,6 +22,10 @@ window.system = {
 
     cordova.exec(onSuccess, onFail, "System", "share-file", [fileUri, filename]);
   },
+  shareViaWhatsapp: function (fileUri, contact, countryCode, onSuccess, onFail) {
+    if (!fileUri || !contact || !countryCode) throw new Error("Missing required parameters!");
+    cordova.exec(onSuccess, onFail, "System", "share-via-whatsapp", [fileUri, contact, countryCode]);
+  },
   sendEmail: function (email, subject, bodyText, bodyHTML, onSuccess, onFail) {
     if (typeof bodyHTML === "function") {
       onSuccess = bodyHTML;
@@ -33,7 +37,13 @@ window.system = {
 
     cordova.exec(onSuccess, onFail, "System", "send-email", [email, subject, bodyText, bodyHTML]);
   },
-  termux: function (command, argument, onSuccess, onFail) {
-    cordova.exec(onSuccess, onFail, "System", "termux", [command, argument]);
+  convertUriToContentSchema: function (fileUri, onSuccess, onFail){
+    cordova.exec(onSuccess, onFail, "System", "convert-uri-to-content-schema", [fileUri]);
+  },
+  getAppInfo: function(onSuccess, onFail){
+    cordova.exec(onSuccess, onFail, "System", "get-app-info", []);
+  },
+  closeApp: function(onSuccess, onFail){
+    cordova.exec(onSuccess, onFail, "System", "close-app", []);
   }
 };
